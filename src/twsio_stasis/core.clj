@@ -11,6 +11,7 @@
 ;; Want to have all of the initial data gathered in one place so we can decide based on all of the initial information how to process it next.
 ;; So want to refactor what I have now to not process posts all the way first, but gather up everything, then process it all.
 
+;; Might want to .gitignore /resources
 
 ;;; Utils
 
