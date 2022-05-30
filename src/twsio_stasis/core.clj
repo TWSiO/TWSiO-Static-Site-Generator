@@ -30,7 +30,6 @@
     (->> m
          (map change-key)
          (apply merge))))
-;;;
 
 (def target-dir "target")
 
@@ -57,8 +56,6 @@
        (val-map (partial apply stasis/slurp-directory))
   ))
 
-;(def file-pass (process-file-matchers file-matchers))
-
 (defn convert-post [post-template content];
   (->> content
     md/md-to-html-string
@@ -66,7 +63,9 @@
     (stache/render post-template)))
 
 ;; Do convert-post on posts, change endpoints, maybe remove post template
-(defn convert-posts-pass [{posts :posts, templates :templates, :as tree}]
+(defn convert-posts-pass
+  [{posts :posts, templates :templates, :as tree}]
+
   (let [post-template (get templates "/post.mustache")
         converter (partial convert-post post-template)
         converted (val-map converter posts)
@@ -87,33 +86,17 @@
 
 ;; Convert keywords to routes
 ;; Filters out anything that isn't routed.
-;; TODO Also needs to "flatten" the records
 (defn final-route-pass [param-routing tree]
   (reduce-kv (partial replace-routing tree) {} param-routing
    ))
 
-; (defn route-and-convert-post [[path contents]]
-;   { (clojure.string/replace path markdown-match ".html")
-;    (convert-post post-template contents) })
-; 
-; (def posts
-;   (->> posts-path
-;        (#(stasis/slurp-directory % markdown-match))
-;        (map route-and-convert-post)
-;        (apply merge)))
-
+;; Compiling it all together
 (defn compile-pages [gathered-filepaths]
   (->> gathered-filepaths
        file-matcher-pass
        convert-posts-pass
        ((partial final-route-pass routing))
        ))
-
-; (def pages
-;   (stasis/merge-page-sources
-;     {:built-pages built-pages
-;      ;:posts posts}))
-;      }))
 
 ;; Potentially get from JSON or something.
 (def config
