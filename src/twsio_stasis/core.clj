@@ -13,7 +13,14 @@
 
 ;; Might want to .gitignore /resources
 
-;;; Utils
+;; It conceptually takes a map of file contents (named keys to contents), and transforms it in several passes into a map of files it outputs.
+; The final pass routes stuff in keys to particular paths.
+
+;; Could I simplify by somehow taking a smaller amount of stuff during a pass and modifying a small amount of stuff in a pass, but still passing the whole thing?
+; (I'm getting flashbacks of monads).
+; I guess using destructuring and modifying variable with everything could be alright.
+
+;------- Utils
 
 (defn trace [x]
   (#(first %&) x (println x)))
@@ -31,12 +38,16 @@
          (map change-key)
          (apply merge))))
 
+;-------- file matchers
+; keys to file contents.
+; Logic to get files as well.
+
 (def target-dir "target")
 
-(def built-pages
-  {"/index.html" "<h1>Welcome!</h1>"
-   "/test-page.html" (fn [context] (str "<p>Test mode is " (if (:test-mode context) "on" "off") "!</p"))
-   "/baz.html" (fn [context] (str "<h1>Welcome to " (:uri context) "!</h1>"))})
+; (def built-pages
+;   {"/index.html" "<h1>Welcome!</h1>"
+;    "/test-page.html" (fn [context] (str "<p>Test mode is " (if (:test-mode context) "on" "off") "!</p"))
+;    "/baz.html" (fn [context] (str "<h1>Welcome to " (:uri context) "!</h1>"))})
 
 (def resources-path "resources/")
 
@@ -56,23 +67,34 @@
        (val-map (partial apply stasis/slurp-directory))
   ))
 
+;---------
+
+;; Converts post content to HTML, then puts that in blog post mustache template.
 (defn convert-post [post-template content];
   (->> content
     md/md-to-html-string
-    (#(identity {:content %}))
+    (#(identity {:post %}))
     (stache/render post-template)))
 
 ;; Do convert-post on posts, change endpoints, maybe remove post template
+; TODO Simplify this
 (defn convert-posts-pass
   [{posts :posts, templates :templates, :as tree}]
 
   (let [post-template (get templates "/post.mustache")
-        converter (partial convert-post post-template)
+
+        default-template (get templates "/default.mustache")
+
+        converter #(stache/render default-template {:title "TODO", :content (convert-post post-template %)} {:header "", :footer ""})
+
         converted (val-map converter posts)
+
         with-endpoints (key-map #(clojure.string/replace % markdown-match ".html") converted)
         ]
-    (assoc tree :posts with-endpoints
-           )))
+
+    (assoc tree :posts with-endpoints)))
+
+;-------------
 
 (def routing
   { :posts "/posts"
@@ -86,16 +108,24 @@
 
 ;; Convert keywords to routes
 ;; Filters out anything that isn't routed.
-(defn final-route-pass [param-routing tree]
+;; Should be the final pass.
+(defn final-routing-pass [param-routing tree]
   (reduce-kv (partial replace-routing tree) {} param-routing
    ))
+
+;-----------
+
+; Compilation
+; 1. Matches keys with raw file output based on file-matchers
+; 2. Converts blog post markdown to HTML with post template.
+; 3. Routes all known pages.
 
 ;; Compiling it all together
 (defn compile-pages [gathered-filepaths]
   (->> gathered-filepaths
        file-matcher-pass
        convert-posts-pass
-       ((partial final-route-pass routing))
+       ((partial final-routing-pass routing))
        ))
 
 ;; Potentially get from JSON or something.

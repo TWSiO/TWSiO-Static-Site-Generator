@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>{{ title }} - TWSiO</title>
+
+    <link rel="stylesheet" href="/assets/css/default.css">
+
+    {{#head}}
+        {{tag}}
+    {{/head}}
+</head>
+<body>
+
+    {{> header}}
+
+    <noscript>
+        {{! TODO}}
+    </noscript>
+    {{{content}}}
+
+    {{> footer}}
+
+    <div id="scripts">
+        {{#scripts}}
+            <script src="{{script}}"></script>
+        {{/scripts}}
+    </div>
+
+</body>
+</html>
