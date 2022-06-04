@@ -70,17 +70,23 @@
    :home [ resources-path, #"index\.mustache" ]
    })
 
-;; Need to recurse
-(defn file-matcher-pass [fm]
-  (->> fm
-       (val-map (partial apply stasis/slurp-directory))
-  ))
+(def output-files {})
+
+;; Need to recurse for more directories
+(def file-contents
+  (->> file-matchers
+       (val-map (partial apply stasis/slurp-directory))))
 
 ;--------- Home page (and maybe other pages)
 
-(defn render-default [{header "/header.mustache", default "/default.mustache", footer "/footer.mustache"}]
-  (fn [content] 
-    ))
+(def templates (:templates file-contents))
+
+;(defn render-default [{header "/header.mustache", default "/default.mustache", footer "/footer.mustache"}]
+(defn render-default [title, content]
+  (stache/render
+    (get templates "/default.mustache")
+    {:title title, :content content}
+    {:header (get templates "/header.mustache"), :footer (get templates "/footer.mustache")}))
 
 (defn handle-home [{home :home, templates :templates, :as tree}]
   )
@@ -94,28 +100,28 @@
     (#(identity {:post %}))
     (stache/render post-template)))
 
-;; Do convert-post on posts, change endpoints, maybe remove post template
-; TODO Simplify this
-(defn convert-posts-pass
-  [{posts :posts, templates :templates, :as tree}]
-  (let [post-template (get templates "/post.mustache")
+;; Basic way would probably be simpler, but I want to see if this works
+(def post-template
+  (->> file-contents
+       :templates
+       (#(get % "/post.mustache"))))
 
-        default-template (get templates "/default.mustache")
+(def default-template (get (:templates file-contents) "/default.mustache"))
 
-        converter #(stache/render default-template {:title "TODO", :content (convert-post post-template %)} {:header "", :footer ""})
+(defn process-post [title, content]
+  (->> content
+       (convert-post post-template)
+       (render-default title)))
 
-        converted (val-map converter posts)
+(def processed-posts
+  (->> file-contents
+       :posts
+       (key-map #(str "/posts" (clojure.string/replace % markdown-match ".html")))
+       (val-map (partial process-post "TODO"))))
 
-        with-endpoints (key-map #(clojure.string/replace % markdown-match ".html") converted)
-        ]
-
-    (assoc tree :posts with-endpoints)))
+(def output-files (merge output-files processed-posts))
 
 ;------------- Routing
-
-(def routing
-  { :posts "/posts"
-   })
 
 ;; Only supports one level at the moment.
 (defn replace-routing [tree aggregate route-name route-string]
@@ -138,12 +144,12 @@
 ; 3. Routes all known pages.
 
 ;; Compiling it all together
-(defn compile-pages [gathered-filepaths]
-  (->> gathered-filepaths
-       file-matcher-pass
-       convert-posts-pass
-       ((partial final-routing-pass routing))
-       ))
+;(defn compile-pages [gathered-filepaths]
+;  (->> gathered-filepaths
+;       file-matcher-pass
+;       convert-posts-pass
+;       ((partial final-routing-pass routing))
+;       ))
 
 ;; Potentially get from JSON or something.
 (def config
@@ -153,6 +159,9 @@
 (defn -main
   "Generate the website"
   [& args]
-  (let [pages (compile-pages file-matchers)]
+  ;(let [pages (compile-pages file-matchers)]
+  (let [pages output-files]
     (stasis/empty-directory! target-dir)
      (stasis/export-pages pages target-dir config)))
+
+;(defn -main [] (println "foobarbaz"))
