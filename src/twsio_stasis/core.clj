@@ -20,6 +20,12 @@
 ; (I'm getting flashbacks of monads).
 ; I guess using destructuring and modifying variable with everything could be alright.
 
+;;;;;;;;;;;;;;;
+
+;; I think I'm going to try and combine Clojure and Scala. Move some of the more "structural" stuff into Scala and have the "implementation" stuff in Clojure. Or something.
+
+;;;;;;;;;;;;;;;
+
 ;------- Utils
 
 (defn trace [x]
@@ -40,7 +46,8 @@
 
 ;-------- file matchers
 ; keys to file contents.
-; Logic to get files as well.
+; Gets the initial file contents.
+; Typically { :key { "filename/path" content } }
 
 (def target-dir "target")
 
@@ -58,8 +65,10 @@
 (def markdown-match #"\.md$")
 
 (def file-matchers
-  {:posts [ (str resources-path "posts/") #"\.md$" ]
-   :templates [ (str resources-path "templates") #"\.mustache$" ]})
+  {:posts [ (str resources-path "posts/"), markdown-match ]
+   :templates [ (str resources-path "templates"), #"\.mustache$" ]
+   :home [ resources-path, #"index\.mustache" ]
+   })
 
 ;; Need to recurse
 (defn file-matcher-pass [fm]
@@ -67,7 +76,16 @@
        (val-map (partial apply stasis/slurp-directory))
   ))
 
-;---------
+;--------- Home page (and maybe other pages)
+
+(defn render-default [{header "/header.mustache", default "/default.mustache", footer "/footer.mustache"}]
+  (fn [content] 
+    ))
+
+(defn handle-home [{home :home, templates :templates, :as tree}]
+  )
+
+;--------- Handle posts
 
 ;; Converts post content to HTML, then puts that in blog post mustache template.
 (defn convert-post [post-template content];
@@ -80,7 +98,6 @@
 ; TODO Simplify this
 (defn convert-posts-pass
   [{posts :posts, templates :templates, :as tree}]
-
   (let [post-template (get templates "/post.mustache")
 
         default-template (get templates "/default.mustache")
@@ -94,7 +111,7 @@
 
     (assoc tree :posts with-endpoints)))
 
-;-------------
+;------------- Routing
 
 (def routing
   { :posts "/posts"
