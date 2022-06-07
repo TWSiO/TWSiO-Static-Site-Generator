@@ -72,10 +72,10 @@
 ; Add URL from key to posts hashmaps and put into blog.mustache template
 
 ;; Converts post content to HTML, then puts that in blog post mustache template.
-(defn convert-post [post-template, {[title] :title, [subtitle] :subtitle}, content];
+(defn convert-post [post-template, {[title] :title, subtitle-list :subtitle}, content];
   (->> content
     (#(md/md-to-html-string % :parse-meta? true))
-    (#(identity {:post %, :title title, :subtitle subtitle}))
+    (#(identity {:post %, :title title, :subtitle subtitle-list}))
     (stache/render post-template)))
 
 (defn process-post [{[title] :title, :as metadata}, content]
