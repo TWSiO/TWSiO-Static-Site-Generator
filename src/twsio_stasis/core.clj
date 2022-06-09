@@ -49,7 +49,9 @@
   {:posts "/posts"
    :home "/"})
 
-(def output-files {})
+(defn copy-file [ path ]
+  {(str path) (slurp (str resources-path path))}
+  )
 
 ;; Need to recurse for more directories
 (def raw-contents
@@ -119,8 +121,6 @@
     (convert posts-list)
     ))
 
-(def output-files (merge output-files post-pages))
-
 ;----- Individual pages
 
 (def not-found 
@@ -128,13 +128,9 @@
        (get-raw-contents :not-found)
        (render-individual "Page Not Found")))
 
-(def output-files (assoc output-files "/not_found.html" not-found))
-
 (def home-page 
   (let [home-template (get-raw-contents :home "/index.mustache")]
         (render-default "This Website is Online" home-template)))
-
-(def output-files (assoc output-files "/index.html" home-page))
 
 ;; Need to get metadata to pass into the function.
 ;(def individual-pages
@@ -142,20 +138,15 @@
 ;       :pages
 ;       (util/map-vals #(render-individual))
 
-;------------- Routing
+;------------- 
 
-;; Only supports one level at the moment.
-(defn replace-routing [tree aggregate route-name route-string]
-  (stasis/merge-page-sources
-    { route-name (util/map-keys #(str route-string %) (get tree route-name))
-     :old aggregate}))
-
-;; Convert keywords to routes
-;; Filters out anything that isn't routed.
-;; Should be the final pass.
-(defn final-routing-pass [param-routing tree]
-  (reduce-kv (partial replace-routing tree) {} param-routing
-   ))
+(def output-files
+  (merge
+    (copy-file "/robots.txt")
+    post-pages
+    {"/not_found.html" not-found}
+    {"/index.html" home-page}
+    ))
 
 ;; Potentially get from JSON or something.
 (def config
