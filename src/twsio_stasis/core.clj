@@ -10,6 +10,14 @@
 (defn trace [x]
   (#(first %&) x (println x)))
 
+(defn put-arg [fun pos & args]
+  (let [ [fst, snd] (split-at (- pos 1) args) ]
+  #(apply fun (concat fst [%] snd))))
+
+(defn apply-put-arg [& args]
+  (print args)
+  ((apply put-arg (butlast args)) (take-last args)))
+
 ;-------- file matchers
 ; keys to file contents.
 ; Gets the initial file contents.
@@ -50,6 +58,12 @@
 
 (defn get-raw-contents [section filename] (get (section raw-contents) filename))
 
+(defn render-template [ template & args ]
+  (as-> raw-contents _
+    (:templates _)
+    (get _ (str "/" template ".mustache"))
+    (apply stache/render (concat [_] args))))
+
 ;; Default processing of markdown
 (defn process-md [[filepath, raw-md]]
   { :filename (remove-path-artifacts "md" filepath)
@@ -77,9 +91,6 @@
 ;--------- Handle posts
 
 (def processed-posts (map process-md (:posts raw-contents)))
-
-(def posts-metadata
-  (util/map-vals md/md-to-meta (:posts raw-contents)))
 
 ;; Basic way would probably be simpler, but I want to see if this works
 (def post-template
