@@ -7,9 +7,9 @@
 
 ;------- Utils
 
-(defn trace [msg & all]
-  (println msg " " all)
-  all)
+(defn trace [msg x]
+  (println msg " " x)
+  x)
 
 (defn put-arg [fun pos & args]
   (let [ [fst, snd] (split-at (- pos 1) args) ]
@@ -120,21 +120,21 @@
         stache-data {:post content, :title title, :subtitle subtitle}
         ]
     [
-     (route :posts filename)
+     (route :posts :filename filename)
      (->> stache-data (stache/render post-template) (render-default title))
      ]))
 
 (def post-pages
-  (let [ convert #(apply hash-map (apply concat %))
-        posts-list (map create-post-page processed-posts)
-        ]
-    (convert posts-list)
-    ))
+  (let [ posts-list (map create-post-page processed-posts) ]
+    (->> posts-list
+         (apply concat)
+         (apply hash-map)
+         )))
 
 (defn create-post-listing [{:keys [filename, content, metadata]}]
   (as-> metadata m
     (merge default-post-metadata m)
-    (assoc m :post-url (route :posts filename))
+    (assoc m :post-url (route :posts :filename filename))
     ;(assoc m :title (first (:title m)))))
     (->> m :title first (assoc m :title))))
 
@@ -148,16 +148,11 @@
 (def blog-page
   (->> processed-posts
        (sort-by get-post-date)
-       (trace "1")
        (map create-post-listing)
-       (trace "2")
        ((fn [list] {:posts list}))
-       (trace "3")
        (render-template "blog")
-       (trace "4")
        (render-default "Blog home")
-       (trace "5")
-       (#(identity { (route :posts "index") % }))))
+       (#(identity { (route :posts :filename "index") % }))))
 
 ;----- Individual pages
 
