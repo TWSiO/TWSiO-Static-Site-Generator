@@ -25,6 +25,10 @@
 
 (def markdown-match #"\.md$")
 
+(defn remove-path-artifacts [ extension path ]
+  (let [regex (re-pattern (str "^\\/|\\." extension "$"))]
+       (clojure.string/replace path regex "")))
+
 (def file-matchers
   {:posts [ (str resources-path "posts/"), markdown-match ]
    :templates [ (str resources-path "templates"), #"\.mustache$" ]
@@ -40,15 +44,22 @@
 (def output-files {})
 
 ;; Need to recurse for more directories
-(def file-contents
+(def raw-contents
   (->> file-matchers
        (util/map-vals (partial apply stasis/slurp-directory))))
 
-(defn get-file-contents [section filename] (get (section file-contents) filename))
+(defn get-raw-contents [section filename] (get (section raw-contents) filename))
+
+;; Default processing of markdown
+(defn process-md [[filepath, raw-md]]
+  { :filename (remove-path-artifacts "md" filepath)
+   :metadata (md/md-to-meta raw-md)
+   :content (md/md-to-html-string raw-md :parse-meta? true)
+   })
 
 ;--------- Random pages
 
-(def templates (:templates file-contents))
+(def templates (:templates raw-contents))
 
 ;(defn render-default [{header "/header.mustache", default "/default.mustache", footer "/footer.mustache"}]
 (defn render-default [title, content]
@@ -65,58 +76,58 @@
 
 ;--------- Handle posts
 
+(def processed-posts (map process-md (:posts raw-contents)))
+
 (def posts-metadata
-  (util/map-vals md/md-to-meta (:posts file-contents)))
+  (util/map-vals md/md-to-meta (:posts raw-contents)))
 
 ;; Basic way would probably be simpler, but I want to see if this works
 (def post-template
-  (->> file-contents
+  (->> raw-contents
        :templates
        (#(get % "/post.mustache"))))
 
-(def default-template (get (:templates file-contents) "/default.mustache"))
+(def default-template (get (:templates raw-contents) "/default.mustache"))
 
-; Make blog page
-; Add URL from key to posts hashmaps and put into blog.mustache template
+(defn process-post [{:keys [filename, metadata, content] :or {metadata {:title nil, :subtitle nil}}}]
+  (let [ title (->> metadata :title first)
+        subtitle (:subtitle metadata)
+        stache-data {:post content, :title title, :subtitle subtitle}
+        ]
+    [
+     (str "/posts/" filename ".html")
+     (->> stache-data (stache/render post-template) (render-default title))
+     ]))
 
-;; Converts post content to HTML, then puts that in blog post mustache template.
-(defn convert-post [post-template, {[title] :title, subtitle-list :subtitle}, content];
-  (->> content
-    (#(md/md-to-html-string % :parse-meta? true))
-    (#(identity {:post %, :title title, :subtitle subtitle-list}))
-    (stache/render post-template)))
+(def posts-list (map process-post processed-posts))
 
-(defn process-post [{[title] :title, :as metadata}, content]
-  (->> content
-       (convert-post post-template metadata)
-       (render-default title)))
+(def post-pages
+  (let [ convert #(apply hash-map (apply concat %))
+        posts-list (map process-post processed-posts)
+        ]
+    (convert posts-list)
+    ))
 
-(def processed-posts
-  (->> file-contents
-       :posts
-       (util/map-kv-vals (fn [filename, contents] (process-post (get posts-metadata filename) contents)))
-       (util/map-keys #(str (:posts routes) (clojure.string/replace % markdown-match ".html")))))
-
-(def output-files (merge output-files processed-posts))
+(def output-files (merge output-files post-pages))
 
 ;----- Individual pages
 
 (def not-found 
   (->> "/not_found.mustache"
-       (get-file-contents :not-found)
+       (get-raw-contents :not-found)
        (render-individual "Page Not Found")))
 
 (def output-files (assoc output-files "/not_found.html" not-found))
 
 (def home-page 
-  (let [home-template (get-file-contents :home "/index.mustache")]
+  (let [home-template (get-raw-contents :home "/index.mustache")]
         (render-default "This Website is Online" home-template)))
 
 (def output-files (assoc output-files "/index.html" home-page))
 
 ;; Need to get metadata to pass into the function.
 ;(def individual-pages
-;  (->> file-contents
+;  (->> raw-contents
 ;       :pages
 ;       (util/map-vals #(render-individual))
 
