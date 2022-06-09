@@ -29,6 +29,8 @@
   {:posts [ (str resources-path "posts/"), markdown-match ]
    :templates [ (str resources-path "templates"), #"\.mustache$" ]
    :home [ resources-path, #"index\.mustache" ]
+   :not-found [ resources-path, #"not_found\.mustache" ]
+   :pages [ (str resources-path "pages/"), #"\.md" ]
    })
 
 (def routes
@@ -54,6 +56,12 @@
     (get templates "/default.mustache")
     {:title title, :content content}
     {:header (get templates "/header.mustache"), :footer (get templates "/footer.mustache")}))
+
+(defn render-individual [title, content]
+  (render-default title
+                  (stache/render
+                    (get templates "/individual_page.mustache")
+                    {:content content})))
 
 ;--------- Handle posts
 
@@ -91,13 +99,26 @@
 
 (def output-files (merge output-files processed-posts))
 
-;----- Home page
+;----- Individual pages
+
+(def not-found 
+  (->> "/not_found.mustache"
+       (get-file-contents :not-found)
+       (render-individual "Page Not Found")))
+
+(def output-files (assoc output-files "/not_found.html" not-found))
 
 (def home-page 
   (let [home-template (get-file-contents :home "/index.mustache")]
         (render-default "This Website is Online" home-template)))
 
 (def output-files (assoc output-files "/index.html" home-page))
+
+;; Need to get metadata to pass into the function.
+;(def individual-pages
+;  (->> file-contents
+;       :pages
+;       (util/map-vals #(render-individual))
 
 ;------------- Routing
 
