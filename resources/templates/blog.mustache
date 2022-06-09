@@ -3,7 +3,9 @@
     <li>
         <a href="{{post-url}}">
             <h2>{{title}}</h2>
-            <p>{{subtitle}}</p>
+            {{#subtitle}}
+                <p class="post-subtitle">{{{.}}}</p>
+            {{/subtitle}}
         </a>
     </li>
 {{/posts}}

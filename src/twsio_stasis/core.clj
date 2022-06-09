@@ -7,8 +7,9 @@
 
 ;------- Utils
 
-(defn trace [x]
-  (#(first %&) x (println x)))
+(defn trace [msg & all]
+  (println msg " " all)
+  all)
 
 (defn put-arg [fun pos & args]
   (let [ [fst, snd] (split-at (- pos 1) args) ]
@@ -46,8 +47,13 @@
    })
 
 (def routes
-  {:posts "/posts"
-   :home "/"})
+  {:posts "/blog/{{{filename}}}.html"
+   :home "/index.html"
+   :not-found "/not_found.html"
+   })
+
+(defn route [ route-id & {:as all} ]
+  (stache/render (get routes route-id) all))
 
 (defn copy-file [ path ]
   {(str path) (slurp (str resources-path path))}
@@ -102,24 +108,56 @@
 
 (def default-template (get (:templates raw-contents) "/default.mustache"))
 
-(defn process-post [{:keys [filename, metadata, content] :or {metadata {:title nil, :subtitle nil}}}]
-  (let [ title (->> metadata :title first)
-        subtitle (:subtitle metadata)
+(def default-post-metadata
+  {:title nil
+   :subtitle nil
+   })
+
+(defn create-post-page [{:keys [filename, content, metadata]}]
+  (let [final-meta (merge default-post-metadata metadata)
+        title (->> final-meta :title first)
+        subtitle (:subtitle final-meta)
         stache-data {:post content, :title title, :subtitle subtitle}
         ]
     [
-     (str "/posts/" filename ".html")
+     (route :posts filename)
      (->> stache-data (stache/render post-template) (render-default title))
      ]))
 
-(def posts-list (map process-post processed-posts))
-
 (def post-pages
   (let [ convert #(apply hash-map (apply concat %))
-        posts-list (map process-post processed-posts)
+        posts-list (map create-post-page processed-posts)
         ]
     (convert posts-list)
     ))
+
+(defn create-post-listing [{:keys [filename, content, metadata]}]
+  (as-> metadata m
+    (merge default-post-metadata m)
+    (assoc m :post-url (route :posts filename))
+    ;(assoc m :title (first (:title m)))))
+    (->> m :title first (assoc m :title))))
+
+(defn get-post-date [{{[date] :date} :metadata}]
+  (if (some? date) 
+    (as-> "yyyy-MM-dd" |
+      (java.text.SimpleDateFormat. |)
+      (.parse | date))))
+
+;; TODO Parse dates, order posts.
+(def blog-page
+  (->> processed-posts
+       (sort-by get-post-date)
+       (trace "1")
+       (map create-post-listing)
+       (trace "2")
+       ((fn [list] {:posts list}))
+       (trace "3")
+       (render-template "blog")
+       (trace "4")
+       (render-default "Blog home")
+       (trace "5")
+       (#(identity { (route :posts "index") % }))))
 
 ;----- Individual pages
 
@@ -140,12 +178,15 @@
 
 ;------------- 
 
+;; I gathered these all here, but in hindsight, I think adding to it gradually was better. It's not as if the order matters.
+;; I guess it sort of gets clutter out of the way, but it also kind of marks the different "sections" of the script.
 (def output-files
   (merge
     (copy-file "/robots.txt")
     post-pages
-    {"/not_found.html" not-found}
-    {"/index.html" home-page}
+    {(route :not-found) not-found}
+    {(route :home) home-page}
+    blog-page
     ))
 
 ;; Potentially get from JSON or something.
