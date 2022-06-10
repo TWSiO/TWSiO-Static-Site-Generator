@@ -66,9 +66,10 @@
 
 (defn get-raw-contents [section filename] (get (section raw-contents) filename))
 
+(def templates (:templates raw-contents))
+
 (defn render-template [ template & args ]
-  (as-> raw-contents _
-    (:templates _)
+  (as-> templates _
     (get _ (str "/" template ".mustache"))
     (apply stache/render (concat [_] args))))
 
@@ -81,32 +82,20 @@
 
 ;--------- Random pages
 
-(def templates (:templates raw-contents))
-
-;(defn render-default [{header "/header.mustache", default "/default.mustache", footer "/footer.mustache"}]
 (defn render-default [title, content]
-  (stache/render
-    (get templates "/default.mustache")
+  (render-template
+    "default"
     {:title title, :content content}
     {:header (get templates "/header.mustache"), :footer (get templates "/footer.mustache")}))
 
 (defn render-individual [title, content]
-  (render-default title
-                  (stache/render
-                    (get templates "/individual_page.mustache")
-                    {:content content})))
+  (->> {:content content}
+       (render-template "individual_page")
+       (render-default title)))
 
 ;--------- Handle posts
 
 (def processed-posts (map process-md (:posts raw-contents)))
-
-;; Basic way would probably be simpler, but I want to see if this works
-(def post-template
-  (->> raw-contents
-       :templates
-       (#(get % "/post.mustache"))))
-
-(def default-template (get (:templates raw-contents) "/default.mustache"))
 
 (def default-post-metadata
   {:title nil
@@ -121,7 +110,7 @@
         ]
     [
      (route :posts :filename filename)
-     (->> stache-data (stache/render post-template) (render-default title))
+     (->> stache-data (render-template "post") (render-default title))
      ]))
 
 (def post-pages
@@ -163,7 +152,7 @@
 
 (def home-page 
   (let [home-template (get-raw-contents :home "/index.mustache")]
-        (render-default "This Website is Online" home-template)))
+    (render-default "This Website is Online" home-template)))
 
 ;; Need to get metadata to pass into the function.
 ;(def individual-pages
