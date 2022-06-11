@@ -14,4 +14,4 @@
   :main ^:skip-aot twsio-stasis.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}}
-  :plugins [[lein-ring "0.12.6"]])
+  :plugins [[lein-ring "0.12.6"] [cider/cider-nrepl "0.24.0"]])
