@@ -7,6 +7,13 @@
 
 ;------- Utils
 
+;; Takes a vec of vec pairs and converts to hashmap
+;; Good for output of mapping over hashmap
+(defn to-hash-map [ v ]
+  (->> v
+    (apply concat)
+    (apply hash-map)))
+
 (defn trace [msg x]
   (println msg " " x)
   x)
@@ -93,6 +100,44 @@
        (render-template "individual_page")
        (render-default title)))
 
+(defn get-file-extension [ path ] (get (re-find #"(.*)\.([^.]*)$" path) 2))
+(defn remove-file-extension [ path ]
+  (get
+    (re-find
+      #"(.*)\.([^.]*)$"
+      path)
+    1))
+
+(defn route-basic-md [ path ] (str (remove-file-extension path) ".html"))
+
+(defn render-md-template [ template, raw-content & other-templates ]
+  (render-template
+    template
+    (clojure.set/rename-keys (md/md-to-html-string-with-meta raw-content)
+                 {:html :content})
+    (if (first other-templates) (first other-templates) {})))
+    ;(if (first other-templates) (first other-templates) ({}))))
+
+(defn render-individual-page-md [ raw-content ]
+  (let [ content-metadata (clojure.set/rename-keys
+                            (md/md-to-html-string-with-meta raw-content)
+                            {:html :content})
+        ]
+    (render-default
+      (:title (:metadata content-metadata))
+      (render-md-template "individual_page" raw-content))))
+
+;; This basically assumes the template has no parameters.
+;(defn render-basic-mustache [ raw-content ]
+;  )
+
+;; Need filename before removing path artifacts.
+;(defn render-basic [ filename, raw-content ]
+;  (case (re-find #"\.[^.]*$" filename)
+;    "md" (render-basic-md filename raw-content)
+;    "mustache" (render-basic-mustache raw-content)
+;  ))
+
 ;--------- Handle posts
 
 (def processed-posts (map process-md (:posts raw-contents)))
@@ -133,7 +178,6 @@
       (java.text.SimpleDateFormat. |)
       (.parse | date))))
 
-;; TODO Parse dates, order posts.
 (def blog-page
   (->> processed-posts
        (sort-by get-post-date)
@@ -154,11 +198,13 @@
   (let [home-template (get-raw-contents :home "/index.mustache")]
     (render-default "This Website is Online" home-template)))
 
-;; Need to get metadata to pass into the function.
-;(def individual-pages
-;  (->> raw-contents
-;       :pages
-;       (util/map-vals #(render-individual))
+(def markdown-pages
+  (->> raw-contents
+       :pages
+       (filter #(= "md" (get-file-extension (first %))))
+       to-hash-map
+       (util/map-vals render-individual-page-md)
+       (util/map-keys #(->> % route-basic-md (str "/pages")))))
 
 ;------------- 
 
@@ -171,6 +217,7 @@
     {(route :not-found) not-found}
     {(route :home) home-page}
     blog-page
+    markdown-pages
     ))
 
 ;; Potentially get from JSON or something.
@@ -185,5 +232,3 @@
   (let [pages output-files]
     (stasis/empty-directory! target-dir)
      (stasis/export-pages pages target-dir config)))
-
-;(defn -main [] (println "foobarbaz"))
