@@ -18,13 +18,14 @@
   (println msg " " x)
   x)
 
-(defn put-arg [fun pos & args]
-  (let [ [fst, snd] (split-at (- pos 1) args) ]
-  #(apply fun (concat fst [%] snd))))
+;=== Configs ===
 
-(defn apply-put-arg [& args]
-  (print args)
-  ((apply put-arg (butlast args)) (take-last args)))
+;; Was going to use stasis way, but then can't view page output with conjure.
+
+(def html-page-titles
+  {"/index.mustache" "This Website is Online"
+   (str blog-path "index.html") "Blog home"
+   })
 
 ;-------- file matchers
 ; keys to file contents.
@@ -45,21 +46,6 @@
   (let [regex (re-pattern (str "^\\/|\\." extension "$"))]
        (clojure.string/replace path regex "")))
 
-(def file-matchers
-  {:posts [ (str site-path "blog/"), markdown-match ]
-   :pages [ (str resources-path "pages/"), markdown-match ]
-   })
-
-(def routes
-  {:posts "/blog/{{{filename}}}.html"
-   })
-
-(defn route [ route-id & {:as all} ]
-  (stache/render (get routes route-id) all))
-
-; I can't figure out how to do complement of process-match so just putting file types here.
-(def copy-match #"\.txt")
-
 ; Copy everything else
 (def process-match #"\.md$|\.mustache$")
 
@@ -68,9 +54,6 @@
 ;; Need to recurse for more directories
 ;(def raw-contents (stasis/slurp-directory site-path #"^/.*.$"))
 (def raw-contents (stasis/slurp-resources "site" #"[^.]+\.[^.]+"))
-  ;(->> file-matchers
-       ;(util/map-vals (partial apply stasis/slurp-directory))))
-
 
 ; Partitions things to blog pages and not blog pages
 (defn identify-section [[ path, _ ]]
@@ -100,12 +83,6 @@
    :content (md/md-to-html-string raw-md :parse-meta? true)
    })
 
-(def html-page-titles
-  {"/index.mustache" "This Website is Online"
-   "/not_found.mustache" "Page not found"
-   (str blog-path "index.html") "Blog home"
-   })
-
 ;--------- Random pages
 
 (defn render-default [title, content]
@@ -127,8 +104,6 @@
       path)
     1))
 
-(defn route-basic-md [ path ] (str (remove-file-extension path) ".html"))
-
 (defn render-md-template [ template, raw-content & other-templates ]
   (render-template
     template
@@ -141,18 +116,7 @@
       (:title (md/md-to-meta raw-content))
       (render-md-template "individual_page" raw-content)))
 
-;; This basically assumes the template has no parameters.
-;(defn render-basic-mustache [ raw-content ]
-;  )
-
-;; Need filename before removing path artifacts.
-;(defn render-basic [ filename, raw-content ]
-;  (case (re-find #"\.[^.]*$" filename)
-;    "md" (render-basic-md filename raw-content)
-;    "mustache" (render-basic-mustache raw-content)
-;  ))
-
-;--------- Handle posts
+;=== Blog ===
 
 (def processed-posts
   (util/map-vals
@@ -189,7 +153,7 @@
     ;(assoc m (:title (first (:title m))))))
     (->> m :title first (assoc m :title))))
 
-(defn get-post-date [{{[date] :date} :metadata}]
+(defn get-post-date [[_, {{[date] :date} :metadata}]]
   (if (some? date) 
     (as-> "yyyy-MM-dd" |
       (java.text.SimpleDateFormat. |)
@@ -197,33 +161,16 @@
 
 (def blog-page
   (let [path (str blog-path "index.html")]
-  (->> processed-posts
-       (sort-by get-post-date)
-       (map create-post-listing)
-       ((fn [list] {:posts list}))
-       (render-template "blog")
-       (render-default (get html-page-titles path))
-       (#(identity { path % }))
-       )))
+    (->> processed-posts
+         (sort-by get-post-date)
+         (map create-post-listing)
+         ((fn [list] {:posts list}))
+         (render-template "blog")
+         (render-default (get html-page-titles path))
+         (#(identity {path %}))
+         )))
 
 ;----- Individual pages
-
-;(def not-found 
-;  (->> "/not_found.mustache"
-;       (get (:other sectioned-raw-contents))
-;       (render-individual (html-page-titles "/not_found.mustache"))))
-;
-;(def home-page 
-;  (let [home-template (get (:other sectioned-raw-contents) "/index.mustache")]
-;    (render-default (html-page-titles "/index.mustache") home-template)))
-;
-;(def markdown-pages
-;  (->> raw-contents
-;       :other
-;       (filter #(= "md" (get-file-extension (first %))))
-;       to-hash-map
-;       (util/map-vals render-individual-page-md)
-;       (util/map-keys convert-default-path)))
 
 (defn process-other-page [[path, contents]]
   (case (get-file-extension path)
@@ -265,7 +212,6 @@
 (defn -main
   "Generate the website"
   [& args]
-  ;(let [pages (compile-pages file-matchers)]
   (let [pages output-files]
     (stasis/empty-directory! target-dir)
      (stasis/export-pages pages target-dir config)))
