@@ -31,13 +31,13 @@
 ; Gets the initial file contents.
 ; Typically { :key { "filename/path" content } }
 
+(def blog-path "/blog/")
+
 (def target-dir "target")
 
 (def resources-path "resources/")
 
-(def posts-path (str resources-path "posts/"))
-
-(def templates-path (str resources-path "templates/"))
+(def site-path (str resources-path "site/"))
 
 (def markdown-match #"\.md$")
 
@@ -46,34 +46,48 @@
        (clojure.string/replace path regex "")))
 
 (def file-matchers
-  {:posts [ (str resources-path "posts/"), markdown-match ]
-   :templates [ (str resources-path "templates"), #"\.mustache$" ]
-   :home [ resources-path, #"index\.mustache" ]
-   :not-found [ resources-path, #"not_found\.mustache" ]
-   :pages [ (str resources-path "pages/"), #"\.md" ]
+  {:posts [ (str site-path "blog/"), markdown-match ]
+   :pages [ (str resources-path "pages/"), markdown-match ]
    })
 
 (def routes
   {:posts "/blog/{{{filename}}}.html"
-   :home "/index.html"
-   :not-found "/not_found.html"
    })
 
 (defn route [ route-id & {:as all} ]
   (stache/render (get routes route-id) all))
 
-(defn copy-file [ path ]
-  {(str path) (slurp (str resources-path path))}
-  )
+; I can't figure out how to do complement of process-match so just putting file types here.
+(def copy-match #"\.txt")
+
+; Copy everything else
+(def process-match #"\.md$|\.mustache$")
+
+(defn convert-default-path [path] (clojure.string/replace path process-match ".html"))
 
 ;; Need to recurse for more directories
-(def raw-contents
-  (->> file-matchers
-       (util/map-vals (partial apply stasis/slurp-directory))))
+;(def raw-contents (stasis/slurp-directory site-path #"^/.*.$"))
+(def raw-contents (stasis/slurp-resources "site" #"[^.]+\.[^.]+"))
+  ;(->> file-matchers
+       ;(util/map-vals (partial apply stasis/slurp-directory))))
 
-(defn get-raw-contents [section filename] (get (section raw-contents) filename))
 
-(def templates (:templates raw-contents))
+; Partitions things to blog pages and not blog pages
+(defn identify-section [[ path, _ ]]
+  (cond
+    (re-find (re-pattern (str "^" blog-path)) path) :blog
+    (re-find process-match path) :other
+    :else :copy
+  ))
+
+(def sectioned-raw-contents
+  (to-hash-map
+    (util/map-vals to-hash-map
+                   (group-by
+                     identify-section
+                     raw-contents))))
+
+(def templates (stasis/slurp-resources "templates" #"\.mustache$"))
 
 (defn render-template [ template & args ]
   (as-> templates _
@@ -81,10 +95,15 @@
     (apply stache/render (concat [_] args))))
 
 ;; Default processing of markdown
-(defn process-md [[filepath, raw-md]]
-  { :filename (remove-path-artifacts "md" filepath)
-   :metadata (md/md-to-meta raw-md)
+(defn process-md [raw-md]
+  {:metadata (md/md-to-meta raw-md)
    :content (md/md-to-html-string raw-md :parse-meta? true)
+   })
+
+(def html-page-titles
+  {"/index.mustache" "This Website is Online"
+   "/not_found.mustache" "Page not found"
+   (str blog-path "index.html") "Blog home"
    })
 
 ;--------- Random pages
@@ -113,19 +132,14 @@
 (defn render-md-template [ template, raw-content & other-templates ]
   (render-template
     template
-    (clojure.set/rename-keys (md/md-to-html-string-with-meta raw-content)
+    (clojure.set/rename-keys (md/md-to-html-string-with-meta raw-content :parse-meta? true)
                  {:html :content})
     (if (first other-templates) (first other-templates) {})))
-    ;(if (first other-templates) (first other-templates) ({}))))
 
 (defn render-individual-page-md [ raw-content ]
-  (let [ content-metadata (clojure.set/rename-keys
-                            (md/md-to-html-string-with-meta raw-content)
-                            {:html :content})
-        ]
     (render-default
-      (:title (:metadata content-metadata))
-      (render-md-template "individual_page" raw-content))))
+      (:title (md/md-to-meta raw-content))
+      (render-md-template "individual_page" raw-content)))
 
 ;; This basically assumes the template has no parameters.
 ;(defn render-basic-mustache [ raw-content ]
@@ -140,21 +154,24 @@
 
 ;--------- Handle posts
 
-(def processed-posts (map process-md (:posts raw-contents)))
+(def processed-posts
+  (util/map-vals
+    #(md/md-to-html-string-with-meta % :parse-meta? true)
+    (:blog sectioned-raw-contents)))
 
 (def default-post-metadata
   {:title nil
    :subtitle nil
    })
 
-(defn create-post-page [{:keys [filename, content, metadata]}]
+(defn create-post-page [[path {:keys [html, metadata]}]]
   (let [final-meta (merge default-post-metadata metadata)
         title (->> final-meta :title first)
         subtitle (:subtitle final-meta)
-        stache-data {:post content, :title title, :subtitle subtitle}
+        stache-data {:post html, :title title, :subtitle subtitle}
         ]
     [
-     (route :posts :filename filename)
+     (convert-default-path path)
      (->> stache-data (render-template "post") (render-default title))
      ]))
 
@@ -165,11 +182,11 @@
          (apply hash-map)
          )))
 
-(defn create-post-listing [{:keys [filename, content, metadata]}]
+(defn create-post-listing [[path, {metadata :metadata}]]
   (as-> metadata m
     (merge default-post-metadata m)
-    (assoc m :post-url (route :posts :filename filename))
-    ;(assoc m :title (first (:title m)))))
+    (assoc m :post-url (convert-default-path path))
+    ;(assoc m (:title (first (:title m))))))
     (->> m :title first (assoc m :title))))
 
 (defn get-post-date [{{[date] :date} :metadata}]
@@ -179,32 +196,54 @@
       (.parse | date))))
 
 (def blog-page
+  (let [path (str blog-path "index.html")]
   (->> processed-posts
        (sort-by get-post-date)
        (map create-post-listing)
        ((fn [list] {:posts list}))
        (render-template "blog")
-       (render-default "Blog home")
-       (#(identity { (route :posts :filename "index") % }))))
+       (render-default (get html-page-titles path))
+       (#(identity { path % }))
+       )))
 
 ;----- Individual pages
 
-(def not-found 
-  (->> "/not_found.mustache"
-       (get-raw-contents :not-found)
-       (render-individual "Page Not Found")))
+;(def not-found 
+;  (->> "/not_found.mustache"
+;       (get (:other sectioned-raw-contents))
+;       (render-individual (html-page-titles "/not_found.mustache"))))
+;
+;(def home-page 
+;  (let [home-template (get (:other sectioned-raw-contents) "/index.mustache")]
+;    (render-default (html-page-titles "/index.mustache") home-template)))
+;
+;(def markdown-pages
+;  (->> raw-contents
+;       :other
+;       (filter #(= "md" (get-file-extension (first %))))
+;       to-hash-map
+;       (util/map-vals render-individual-page-md)
+;       (util/map-keys convert-default-path)))
 
-(def home-page 
-  (let [home-template (get-raw-contents :home "/index.mustache")]
-    (render-default "This Website is Online" home-template)))
+(defn process-other-page [[path, contents]]
+  (case (get-file-extension path)
+    "md" { (convert-default-path path),
+          (render-individual-page-md contents)
+          }
+    "mustache" { (convert-default-path path),
+                (render-individual
+                  (get html-page-titles path)
+                  contents
+                  )}
+    ))
 
-(def markdown-pages
-  (->> raw-contents
-       :pages
-       (filter #(= "md" (get-file-extension (first %))))
-       to-hash-map
-       (util/map-vals render-individual-page-md)
-       (util/map-keys #(->> % route-basic-md (str "/pages")))))
+(def other-pages
+  (apply merge
+    (map
+      process-other-page
+      (:other
+        sectioned-raw-contents
+        ))))
 
 ;------------- 
 
@@ -212,12 +251,10 @@
 ;; I guess it sort of gets clutter out of the way, but it also kind of marks the different "sections" of the script.
 (def output-files
   (merge
-    (copy-file "/robots.txt")
+    (:copy sectioned-raw-contents)
     post-pages
-    {(route :not-found) not-found}
-    {(route :home) home-page}
+    other-pages
     blog-page
-    markdown-pages
     ))
 
 ;; Potentially get from JSON or something.
