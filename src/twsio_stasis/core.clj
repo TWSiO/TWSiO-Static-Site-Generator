@@ -56,6 +56,7 @@
 (defn identify-section [[ path, _ ]]
   (cond
     (re-find (re-pattern (str "^" blog-path)) path) :blog
+    (= path "/index.mustache") :home
     (re-find process-match path) :other
     :else :file-copy
   ))
@@ -114,7 +115,7 @@
 
 ;=== Blog ===
 
-(def processed-posts
+(def parsed-posts
   (util/map-vals
     #(md/md-to-html-string-with-meta % :parse-meta? true)
     (:blog sectioned-raw-contents)))
@@ -124,16 +125,38 @@
    :subtitle nil
    })
 
-(defn create-post-page [[path {:keys [html, metadata]}]]
-  (let [final-meta (merge default-post-metadata metadata)
-        title (->> final-meta :title first)
-        subtitle (:subtitle final-meta)
-        stache-data {:post html, :title title, :subtitle subtitle}
-        ]
-    [
-     (convert-default-path path)
-     (->> stache-data (render-template "post") (render-default title))
-     ]))
+(defn process-post [[path, {content :html, metadata :metadata}]]
+  [path
+   {:html content
+    :metadata 
+    (as-> metadata m
+      (merge default-post-metadata m)
+      (assoc m :post-url (convert-default-path path))
+      ;(assoc m (:title (first (:title m))))))
+      (->> m :date first (assoc m :date))
+      (->> m :title first (assoc m :title)))
+    }])
+
+(defn get-post-date [[_, {{date :date} :metadata :as all}]]
+  (if (some? date) 
+    (as-> "yyyy-MM-dd" |
+      (java.text.SimpleDateFormat. |)
+      (.parse | date))))
+
+(def processed-posts
+  (reverse
+    (sort-by
+      get-post-date
+      (map
+        process-post 
+        parsed-posts))))
+
+(defn get-metadata [[path, {metadata :metadata}]] metadata)
+
+(defn create-post-page [[path, {{title :title} :metadata :as data}]]
+    [(convert-default-path path)
+     (->> data (render-template "post") (render-default title))
+     ])
 
 (def post-pages
   (->> processed-posts
@@ -141,29 +164,13 @@
        to-hash-map
        ))
 
-(defn create-post-listing [[path, {metadata :metadata}]]
-  (as-> metadata m
-    (merge default-post-metadata m)
-    (assoc m :post-url (convert-default-path path))
-    ;(assoc m (:title (first (:title m))))))
-    (->> m :title first (assoc m :title))))
-
-(defn get-post-date [[_, {{[date] :date} :metadata}]]
-  (if (some? date) 
-    (as-> "yyyy-MM-dd" |
-      (java.text.SimpleDateFormat. |)
-      (.parse | date))))
-
 (def blog-page
   (let [path (str blog-path "index.html")]
-    (->> processed-posts
-         (sort-by get-post-date)
-         (map create-post-listing)
-         ((fn [list] {:posts list}))
-         (render-template "blog")
-         (render-default (get html-page-titles path))
-         (#(identity {path %}))
-         )))
+    (as-> processed-posts thread
+         (map get-metadata thread)
+         (render-template "blog" {:posts thread})
+         (render-individual (get html-page-titles path) thread)
+         {path thread})))
 
 ;=== Individual pages ===
 
@@ -187,6 +194,14 @@
         sectioned-raw-contents
         ))))
 
+;First do special stuff for home page, then render-individual
+(def home-page
+  (as-> processed-posts thread
+    (take 3 thread)
+    (map get-metadata thread)
+    (render-template "home" {:posts thread})
+    (render-individual "Home" thread)))
+
 ;=== Copy other files ===
 
 ;; Has to come after stasis stuff
@@ -204,6 +219,7 @@
     post-pages
     other-pages
     blog-page
+    {"/index.html" home-page}
     (:file-copy sectioned-raw-contents)
     ))
 
