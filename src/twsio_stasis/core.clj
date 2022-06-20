@@ -2,6 +2,7 @@
   (:require [markdown.core :as md])
   (:require [clostache.parser :as stache])
   (:require [stasis.core :as stasis])
+  (:require [babashka.fs :as fs])
   (:require [medley.core :as util]))
 ;  (:gen-class))
 
@@ -22,23 +23,20 @@
 
 ;; Was going to use stasis way, but then can't view page output with conjure.
 
+(def blog-path "/blog/")
+
+(def target-dir "target")
+
+(def resources-path "resources")
+
+(def site-path (str resources-path "/site"))
+
 (def html-page-titles
   {"/index.mustache" "This Website is Online"
    (str blog-path "index.html") "Blog home"
    })
 
-;-------- file matchers
-; keys to file contents.
-; Gets the initial file contents.
-; Typically { :key { "filename/path" content } }
-
-(def blog-path "/blog/")
-
-(def target-dir "target")
-
-(def resources-path "resources/")
-
-(def site-path (str resources-path "site/"))
+;=== General functionality ===
 
 (def markdown-match #"\.md$")
 
@@ -51,8 +49,7 @@
 
 (defn convert-default-path [path] (clojure.string/replace path process-match ".html"))
 
-;; Need to recurse for more directories
-;(def raw-contents (stasis/slurp-directory site-path #"^/.*.$"))
+; Get everything, partition based on if we actually want to slurp it, then get paths and copy everything that isn't slurped.
 (def raw-contents (stasis/slurp-resources "site" #"[^.]+\.[^.]+"))
 
 ; Partitions things to blog pages and not blog pages
@@ -60,15 +57,16 @@
   (cond
     (re-find (re-pattern (str "^" blog-path)) path) :blog
     (re-find process-match path) :other
-    :else :copy
+    :else :file-copy
   ))
 
 (def sectioned-raw-contents
   (to-hash-map
-    (util/map-vals to-hash-map
-                   (group-by
-                     identify-section
-                     raw-contents))))
+    (util/map-vals
+      to-hash-map
+      (group-by
+        identify-section
+        raw-contents))))
 
 (def templates (stasis/slurp-resources "templates" #"\.mustache$"))
 
@@ -82,8 +80,6 @@
   {:metadata (md/md-to-meta raw-md)
    :content (md/md-to-html-string raw-md :parse-meta? true)
    })
-
-;--------- Random pages
 
 (defn render-default [title, content]
   (render-template
@@ -140,11 +136,10 @@
      ]))
 
 (def post-pages
-  (let [ posts-list (map create-post-page processed-posts) ]
-    (->> posts-list
-         (apply concat)
-         (apply hash-map)
-         )))
+  (->> processed-posts
+       (map create-post-page)
+       to-hash-map
+       ))
 
 (defn create-post-listing [[path, {metadata :metadata}]]
   (as-> metadata m
@@ -170,7 +165,7 @@
          (#(identity {path %}))
          )))
 
-;----- Individual pages
+;=== Individual pages ===
 
 (defn process-other-page [[path, contents]]
   (case (get-file-extension path)
@@ -192,16 +187,24 @@
         sectioned-raw-contents
         ))))
 
-;------------- 
+;=== Copy other files ===
+
+;; Has to come after stasis stuff
+;; slurp-dir doesn't work with ttf and non-text files.
+(defn copy-other-files []
+  (fs/copy-tree (str resources-path "/fonts") (str target-dir "/assets/fonts"))
+  )
+
+;======
 
 ;; I gathered these all here, but in hindsight, I think adding to it gradually was better. It's not as if the order matters.
 ;; I guess it sort of gets clutter out of the way, but it also kind of marks the different "sections" of the script.
 (def output-files
   (merge
-    (:copy sectioned-raw-contents)
     post-pages
     other-pages
     blog-page
+    (:file-copy sectioned-raw-contents)
     ))
 
 ;; Potentially get from JSON or something.
@@ -209,9 +212,16 @@
   {:test-mode true
    })
 
+;(defn get-pages [] output-files)
+
+;(def app (stasis/serve-pages get-pages))
+
+(def app (stasis/serve-pages output-files))
+
 (defn -main
   "Generate the website"
   [& args]
   (let [pages output-files]
     (stasis/empty-directory! target-dir)
-     (stasis/export-pages pages target-dir config)))
+    (stasis/export-pages pages target-dir config))
+  (copy-other-files))
