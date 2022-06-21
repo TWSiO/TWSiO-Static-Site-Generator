@@ -50,7 +50,7 @@
 (defn convert-default-path [path] (clojure.string/replace path process-match ".html"))
 
 ; Get everything, partition based on if we actually want to slurp it, then get paths and copy everything that isn't slurped.
-(def raw-contents (stasis/slurp-resources "site" #"[^.]+\.[^.]+"))
+(def raw-contents (stasis/slurp-resources "site" #"^site/[^.]+\.[^.]+"))
 
 ; Partitions things to blog pages and not blog pages
 (defn identify-section [[ path, _ ]]
@@ -207,7 +207,7 @@
 ;; Has to come after stasis stuff
 ;; slurp-dir doesn't work with ttf and non-text files.
 (defn copy-other-files []
-  (fs/copy-tree (str resources-path "/fonts") (str target-dir "/assets/fonts"))
+  (fs/copy-tree (str resources-path "/assets") (str target-dir "/assets"))
   )
 
 ;======
