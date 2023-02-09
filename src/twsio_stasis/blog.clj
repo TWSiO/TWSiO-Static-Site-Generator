@@ -41,10 +41,11 @@
     (sort-by get-post-date X)
     (reverse X)))
 
+; Testing using `let` in process-posts instead of `as->`
 (defn pp [raw-blog]
   (let [parsed-posts (parse-posts raw-blog)
-        process-posts (map process-posts parsed-posts)
-        chronological-posts (sort-by get-post-date process-posts)
+        processed-posts (map process-post parsed-posts)
+        chronological-posts (sort-by get-post-date processed-posts)
         ]
     (reverse chronological-posts)))
 
@@ -73,4 +74,3 @@
          (util/render-template "blog" {:posts thread})
          (util/render-individual (get config/html-page-titles path) thread)
          {path thread})))
-

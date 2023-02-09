@@ -13,84 +13,98 @@
     (apply concat)
     (apply hash-map)))
 
+
+; Debugging
 (defn trace [msg x]
   (println msg " " x)
   x)
 
-; Copy everything else
-(def process-match #"\.md$|\.mustache$")
 
+(def markdown-match #"\.md$")
+
+
+(def md-or-mustache-regex #"\.md$|\.mustache$")
+
+
+; Converts file extension .md and .mustache to .html
 (defn convert-default-path [path]
-  (clojure.string/replace path process-match ".html"))
+  (clojure.string/replace path md-or-mustache-regex ".html"))
 
+
+; All templates as {"PATH" "CONTENTS"}
 (def templates
   (stasis/slurp-resources "templates" #"\.mustache$"))
 
-(defn render-template [ template & args ]
-  (as-> templates _
-    (get _ (str "/" template ".mustache"))
-    (apply stache/render (concat [_] args))))
 
+; Given a template name, gets a template
+(defn get-template [template-name]
+  (get templates (str "/" template-name ".mustache"))
+  )
+
+
+; Given a (mustache) template name and template arguments, render the template.
+(defn render-template [ template-name & args ]
+  (as-> template-name X
+    (get-template X)
+    (concat [X] args)
+    (apply stache/render X)))
+
+
+; Renders default template which just puts the header and footer and sets the title.
 (defn render-default [title, content]
   (render-template
     "default"
     {:title title, :content content}
     {:header (get templates "/header.mustache"), :footer (get templates "/footer.mustache")}))
 
+
+; Renders individual page which mostly puts `<main>` tag around everything, then just does default render.
 (defn render-individual [title, content]
   (->> {:content content}
        (render-template "individual_page")
        (render-default title)))
+
 
 (defn remove-file-extension [ path ]
   (as-> path X
     (re-find #"(.*)\.([^.]*)$" X)
     (get X 1)))
 
-;; Default processing of markdown
+
+;; Given MD string, gets metadata and content
 (defn process-md [raw-md]
   {:metadata (md/md-to-meta raw-md)
    :content (md/md-to-html-string raw-md :parse-meta? true)
    })
 
-(def markdown-match #"\.md$")
 
+; Removes things like "/" and "." from paths.
 (defn remove-path-artifacts [ extension path ]
   (let [regex (re-pattern (str "^\\/|\\." extension "$"))]
        (clojure.string/replace path regex "")))
 
-(defn render-md-template [ template, raw-content & other-templates ]
-  (render-template
-    template
-    (clojure.set/rename-keys (md/md-to-html-string-with-meta raw-content :parse-meta? true)
-                 {:html :content})
-    (if (first other-templates) (first other-templates) {})))
 
+; Renders a template given raw markdown string.
+; Not sure what the first-template is?
+(defn render-md-template [ template, raw-content & other-templates ]
+  (let [html-and-meta (md/md-to-html-string-with-meta raw-content :parse-meta? true)
+        content-and-meta (clojure.set/rename-keys html-and-meta {:html :content})
+
+        first-template (if (first other-templates) (first other-templates) {})
+        ]
+
+  (render-template template content-and-meta first-template)))
+
+
+; Default for rendering just a random markdown page.
 (defn render-individual-page-md [ raw-content ]
     (render-default
       (:title (md/md-to-meta raw-content))
       (render-md-template "individual_page" raw-content)))
 
+
+; Given path string, get extension.
 (defn get-file-extension [ path ]
   (get
     (re-find #"(.*)\.([^.]*)$" path)
     2))
-
-; Get everything, partition based on if we actually want to slurp it, then get paths and copy everything that isn't slurped.
-(def raw-contents
-  (stasis/slurp-resources "site" #"^site/[^.]+\.[^.]+"))
-
-; Partitions things to blog pages and not blog pages
-(defn identify-section [[ path, _ ]]
-  (cond
-    (re-find (re-pattern (str "^" config/blog-path)) path) :blog
-    (= path "/index.mustache") :home
-    (re-find process-match path) :other
-    :else :file-copy
-  ))
-
-(def sectioned-raw-contents
-  (as-> raw-contents _
-    (group-by identify-section _)
-    (medley/map-vals to-hash-map _)
-    (to-hash-map _)))
