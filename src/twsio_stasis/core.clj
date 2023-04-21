@@ -1,6 +1,7 @@
 (ns twsio-stasis.core
   (:require [stasis.core :as stasis])
   (:require [babashka.fs :as fs])
+  (:require [medley.core :as medley])
   (:require [twsio-stasis.blog :as blog])
   (:require [twsio-stasis.util :as util])
   (:require [twsio-stasis.config :as config])
@@ -28,7 +29,7 @@
 
 (def sectioned-raw-contents
   (as-> raw-contents X
-    (group-by util/identify-section X)
+    (group-by identify-section X)
     (medley/map-vals util/to-hash-map X)
     (util/to-hash-map X)))
 
@@ -44,12 +45,12 @@
 
                              "mustache" (util/render-individual page-title contents))
         ]
-    {converted-path contents}
+    {converted-path processed-contents}
     ))
 
 
 (def other-pages
-  (as-> util/sectioned-raw-contents X
+  (as-> sectioned-raw-contents X
     (:other X)
     (map process-other-page X)
     (apply merge X)))
@@ -57,7 +58,7 @@
 
 ;First do special stuff for home page, then render-individual
 (def home-page
-  (as-> util/sectioned-raw-contents thread
+  (as-> sectioned-raw-contents thread
     (:blog thread)
     (blog/process-posts thread)
     (take 3 thread)
@@ -81,12 +82,13 @@
 ;; I guess it sort of gets clutter out of the way, but it also kind of marks the different "sections" of the script.
 (def output-files
   (merge
-    (blog/post-pages (:blog util/sectioned-raw-contents))
+    (blog/post-pages (:blog sectioned-raw-contents))
     other-pages
-    (blog/blog-page (:blog util/sectioned-raw-contents))
+    (blog/blog-page (:blog sectioned-raw-contents))
     {"/index.html" home-page}
-    (:file-copy util/sectioned-raw-contents)
+    (:file-copy sectioned-raw-contents)
     ))
+
 
 ;; Potentially get from JSON or something.
 (def config
