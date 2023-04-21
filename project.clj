@@ -11,6 +11,7 @@
                  [de.ubercode.clostache/clostache "1.4.0"]
                  [medley "1.4.0"]
                  [babashka/fs "0.1.6"]
+                 [enlive "1.1.6"]
                  ]
   :main ^:skip-aot twsio-stasis.core
   :target-path "target/%s"
