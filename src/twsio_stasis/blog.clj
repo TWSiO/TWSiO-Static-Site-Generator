@@ -3,12 +3,16 @@
   (:require [medley.core :as medley])
   (:require [twsio-stasis.util :as util])
   (:require [twsio-stasis.config :as config])
-  (:require [net.cgrand.enlive-html :as html])
+  (:require [twsio-stasis.addons :as addons])
   )
 
 (defn parse-post [raw-post]
   (as-> raw-post X
-    (md/md-to-html-string-with-meta X :parse-meta? true)
+    (md/md-to-html-string-with-meta
+      X
+      :parse-meta? true
+      :heading-anchors true
+      :footnotes? true)
   ))
 
 (def default-post-metadata
@@ -17,18 +21,19 @@
    })
 
 (defn modify-metadata [path metadata]
-  (as-> metadata m
-    (merge default-post-metadata m)
-    (assoc m :post-url (util/convert-default-path path))
-    ;(assoc m (:title (first (:title m))))))
-    (->> m :date first (assoc m :date))
-    (->> m :title first (assoc m :title)))
-  )
+  (as-> metadata X
+    (merge default-post-metadata X)
+    (assoc X :post-url (util/convert-default-path path))
+    (update X :date first)
+    (update X :title first)
+    ))
 
+; Parses a post, modifies the metadata, and does other modifications.
 (defn process-post [[path, raw-post]]
   (as-> raw-post X
-    (parse-post raw-post)
+    (parse-post X)
     (update X :metadata (partial modify-metadata path))
+    (update X :html addons/footnote-transform)
     [path, X]
     ))
 
