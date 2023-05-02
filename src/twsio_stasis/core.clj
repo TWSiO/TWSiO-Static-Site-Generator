@@ -5,8 +5,10 @@
   (:require [twsio-stasis.blog :as blog])
   (:require [twsio-stasis.util :as util])
   (:require [twsio-stasis.config :as config])
+  (:require [babashka.fs :as fs])
+  (:require [clojure.data.json :as json])
+  (:require [clostache.parser :as stache])
   )
-;  (:gen-class))
 
 
 ; Get everything, partition based on if we actually want to slurp it, then get paths and copy everything that isn't slurped.
@@ -15,7 +17,6 @@
 (def raw-contents
   (stasis/slurp-resources "site" #"^site/[^.]+\.[^.]+"))
 
-
 ; Partitions things to blog pages and not blog pages
 (defn identify-section [[ path, _ ]]
   (let [blog-path-regex (re-pattern (str "^" config/blog-path))]
@@ -23,6 +24,8 @@
       (re-find blog-path-regex path) :blog
       (= path "/index.mustache") :home
       (re-find util/md-or-mustache-regex path) :other
+      ; I think that was original plan was to put this stuff in the config. Oh well.
+      (util/meta-file? path) :meta
       :else :file-copy
       )))
 
@@ -33,28 +36,44 @@
     (medley/map-vals util/to-hash-map X)
     (util/to-hash-map X)))
 
+
+(def parsed-meta
+  (medley/map-vals
+    #(json/read-str % :key-fn keyword)
+    (:meta sectioned-raw-contents)
+    ))
+
 ;=== Individual pages ===
 
-(defn process-other-page [[path, contents]]
+(defn process-other-page [file-meta, [path, contents]]
   (let [converted-path (util/convert-default-path path)
 
         page-title (get config/html-page-titles path)
 
-        processed-contents (case (util/get-file-extension path)
+        processed-contents (case (fs/extension path)
                              "md" (util/render-individual-page-md contents)
 
-                             "mustache" (util/render-individual page-title contents))
+                             "mustache" (util/render-default
+                                          file-meta
+                                          (stache/render
+                                            contents
+                                            file-meta
+                                            )))
         ]
     {converted-path processed-contents}
     ))
 
 
 (def other-pages
+  (let [process-other-page-with-meta (fn [page-data]
+                                       (process-other-page
+                                         (util/find-matching-meta parsed-meta page-data)
+                                         page-data))
+        ]
   (as-> sectioned-raw-contents X
     (:other X)
-    (map process-other-page X)
-    (apply merge X)))
-
+    (map process-other-page-with-meta X)
+    (apply merge X))))
 
 ;First do special stuff for home page, then render-individual
 (def home-page

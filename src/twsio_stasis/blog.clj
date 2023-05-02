@@ -3,7 +3,6 @@
   (:require [medley.core :as medley])
   (:require [twsio-stasis.util :as util])
   (:require [twsio-stasis.config :as config])
-  (:require [twsio-stasis.addons :as addons])
   )
 
 (defn parse-post [raw-post]
@@ -33,7 +32,6 @@
   (as-> raw-post X
     (parse-post X)
     (update X :metadata (partial modify-metadata path))
-    (update X :html addons/footnote-transform)
     [path, X]
     ))
 
@@ -58,7 +56,7 @@
      (util/convert-default-path path)
      (->> data
           (util/render-template "post")
-          (util/render-default title))
+          (util/render-default data))
      ])
 
 (defn post-pages [raw-blog]
@@ -71,10 +69,11 @@
 ; The post listings page.
 (defn blog-page [raw-blog]
   (let [path (str config/blog-path "index.html")
+        title (get config/html-page-titles path)
         ]
     (as-> raw-blog X
          (process-posts X)
          (map get-metadata X)
          (util/render-template "blog" {:posts X})
-         (util/render-individual (get config/html-page-titles path) X)
+         (util/render-default {:title title} X)
          {path X})))

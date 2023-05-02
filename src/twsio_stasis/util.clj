@@ -4,6 +4,7 @@
   (:require [markdown.core :as md])
   (:require [medley.core :as medley])
   (:require [twsio-stasis.config :as config])
+  (:require [babashka.fs :as fs])
   )
 
 ;; Takes a vec of vec pairs and converts to hashmap
@@ -43,32 +44,36 @@
 
 
 ; Given a (mustache) template name and template arguments, render the template.
-(defn render-template [ template-name & args ]
-  (as-> template-name X
-    (get-template X)
-    (concat [X] args)
-    (apply stache/render X)))
+; When I see it like this, it's not really doing much, is it.
+(defn render-template
+  ([ template-name data ]
+    (stache/render (get-template template-name) data))
+  ([ template-name data partial-templates ]
+    (stache/render (get-template template-name) data partial-templates))
+    )
 
+(def default-partials
+  {:header (get templates "/header.mustache"),
+   :footer (get templates "/footer.mustache")})
 
 ; Renders default template which just puts the header and footer and sets the title.
-(defn render-default [title, content]
+; (Why not just pass whatever metadata markdown creates to template?
+; TODO Can maybe mostly get rid of? Or simply make as a composed/partial function?
+; Also, maybe content can be a partial template as well and just combine and render everything at once rather than content separately.
+(defn render-default [source-meta, content]
   (render-template
     "default"
-    {:title title, :content content}
-    {:header (get templates "/header.mustache"), :footer (get templates "/footer.mustache")}))
+    (merge source-meta {:content content})
+    default-partials
+    ))
 
 
 ; Renders individual page which mostly puts `<main>` tag around everything, then just does default render.
+; TODO Can probably get rid of.
 (defn render-individual [title, content]
   (->> {:content content}
        (render-template "individual_page")
-       (render-default title)))
-
-
-(defn remove-file-extension [ path ]
-  (as-> path X
-    (re-find #"(.*)\.([^.]*)$" X)
-    (get X 1)))
+       (render-default {:title title})))
 
 
 ;; Given MD string, gets metadata and content
@@ -91,20 +96,40 @@
         content-and-meta (clojure.set/rename-keys html-and-meta {:html :content})
 
         first-template (if (first other-templates) (first other-templates) {})
+        rendered (render-template template content-and-meta first-template)
         ]
-
-  (render-template template content-and-meta first-template)))
+    rendered
+  ))
 
 
 ; Default for rendering just a random markdown page.
 (defn render-individual-page-md [ raw-content ]
+  (let [page-meta (md/md-to-meta raw-content)
+        ]
     (render-default
-      (:title (md/md-to-meta raw-content))
-      (render-md-template "individual_page" raw-content)))
+      page-meta
+      (render-md-template "individual_page" raw-content))))
 
 
-; Given path string, get extension.
-(defn get-file-extension [ path ]
-  (get
-    (re-find #"(.*)\.([^.]*)$" path)
-    2))
+(defn meta-file? [ path ]
+  (as-> path X
+    (fs/file-name X)
+    (fs/strip-ext X)
+    (fs/split-ext X)
+    (get X 1)
+    (= "meta" X)
+    ))
+
+(defn find-matching-meta [meta-files-data, [content-path, _]]
+  (let [pred (fn [[meta-path, _]]
+                (=
+                 (fs/strip-ext (fs/strip-ext meta-path))
+                 (fs/strip-ext content-path)
+                 )
+               )
+        ]
+    (as-> meta-files-data X
+      (filter pred X)
+      (first X)
+      (second X)
+    )))
