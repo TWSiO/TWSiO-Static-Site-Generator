@@ -55,7 +55,7 @@
 
                              "mustache" (util/render-default
                                           file-meta
-                                          (stache/render
+                                          (util/fixed-render
                                             contents
                                             file-meta
                                             )))

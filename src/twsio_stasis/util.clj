@@ -20,6 +20,16 @@
   (println msg " " x)
   x)
 
+; There's a bug with clostache that puts backspaces before dollar signs.
+; This is a fix for that.
+; Java/Clojure regex is weird requiring re-pattern and all of those backspaces.
+(defn fixed-render [ & args ]
+  (as-> args X
+    (apply stache/render args)
+    (clojure.string/replace X (re-pattern "\\\\\\$") "\\$")
+    )
+  )
+
 
 (def markdown-match #"\.md$")
 
@@ -47,9 +57,9 @@
 ; When I see it like this, it's not really doing much, is it.
 (defn render-template
   ([ template-name data ]
-    (stache/render (get-template template-name) data))
+    (fixed-render (get-template template-name) data))
   ([ template-name data partial-templates ]
-    (stache/render (get-template template-name) data partial-templates))
+    (fixed-render (get-template template-name) data partial-templates))
     )
 
 (def default-partials

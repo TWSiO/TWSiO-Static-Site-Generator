@@ -6,13 +6,12 @@
   )
 
 (defn parse-post [raw-post]
-  (as-> raw-post X
-    (md/md-to-html-string-with-meta
-      X
-      :parse-meta? true
-      :heading-anchors true
-      :footnotes? true)
-  ))
+  (md/md-to-html-string-with-meta
+    raw-post
+    :parse-meta? true
+    :heading-anchors true
+    :footnotes? true)
+  )
 
 (def default-post-metadata
   {:title nil
