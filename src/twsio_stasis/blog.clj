@@ -22,8 +22,7 @@
   (as-> metadata X
     (merge default-post-metadata X)
     (assoc X :post-url (util/convert-default-path path))
-    (update X :date first)
-    (update X :title first)
+    (assoc X :date-string (.format (java.text.SimpleDateFormat. "yyyy-MM-dd") (:date X)))
     ))
 
 ; Parses a post, modifies the metadata, and does other modifications.
@@ -44,7 +43,7 @@
 (defn process-posts [raw-blog]
   (as-> raw-blog X
     (map process-post X)
-    (sort-by #(parse-date (get-in % [1 :metadata :date])) X)
+    (sort-by #(get-in % [1 :metadata :date]) X)
     (reverse X)))
 
 (defn get-metadata [post-data]
