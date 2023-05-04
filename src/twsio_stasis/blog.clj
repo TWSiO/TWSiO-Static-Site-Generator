@@ -49,12 +49,12 @@
 (defn get-metadata [post-data]
   (get-in post-data [1 :metadata]))
 
-(defn create-post-page [[path, {{title :title} :metadata :as data}]]
+(defn create-post-page [[path, data]]
     [
      (util/convert-default-path path)
      (->> data
           (util/render-template "post")
-          (util/render-default data))
+          (util/render-default (:metadata data)))
      ])
 
 (defn post-pages [raw-blog]
