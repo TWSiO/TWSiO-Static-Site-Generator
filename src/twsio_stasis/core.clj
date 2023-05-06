@@ -77,13 +77,13 @@
 
 ;First do special stuff for home page, then render-individual
 (def home-page
-  (as-> sectioned-raw-contents thread
-    (:blog thread)
-    (blog/process-posts thread)
-    (take 3 thread)
-    (map blog/get-metadata thread)
-    (util/render-template "home" {:posts thread})
-    (util/render-individual "Home" thread)))
+  (as-> sectioned-raw-contents X
+    (:blog X)
+    (blog/process-posts X)
+    (take 3 X)
+    (map blog/get-metadata X)
+    (util/render-template "home" {:posts X})
+    (util/render-default {:title "Home"} X)))
 
 ;=== Copy other files ===
 

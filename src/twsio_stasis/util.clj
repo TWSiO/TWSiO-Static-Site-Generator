@@ -78,14 +78,6 @@
     ))
 
 
-; Renders individual page which mostly puts `<main>` tag around everything, then just does default render.
-; TODO Can probably get rid of.
-(defn render-individual [title, content]
-  (->> {:content content}
-       (render-template "individual_page")
-       (render-default {:title title})))
-
-
 ;; Given MD string, gets metadata and content
 (defn process-md [raw-md]
   {:metadata (md/md-to-meta raw-md)
@@ -118,7 +110,7 @@
         ]
     (render-default
       page-meta
-      (render-md-template "individual_page" raw-content))))
+      (render-md-template "individual_md" raw-content))))
 
 
 (defn meta-file? [ path ]
