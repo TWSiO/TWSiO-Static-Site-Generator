@@ -70,12 +70,13 @@
 ; (Why not just pass whatever metadata markdown creates to template?
 ; TODO Can maybe mostly get rid of? Or simply make as a composed/partial function?
 ; Also, maybe content can be a partial template as well and just combine and render everything at once rather than content separately.
-(defn render-default [source-meta, content]
+(defn render-default [source-meta, partial-template]
   (render-template
     "default"
-    (merge source-meta {:content content})
-    default-partials
-    ))
+    ;(merge source-meta {:content content})
+    source-meta
+    (merge default-partials {:html partial-template}
+    )))
 
 
 ;; Given MD string, gets metadata and content
@@ -109,8 +110,9 @@
   (let [page-meta (md/md-to-meta raw-content)
         ]
     (render-default
-      page-meta
-      (render-md-template "individual_md" raw-content))))
+      (merge page-meta {:content (render-md-template "individual_md" raw-content)})
+      "{{{content}}}"
+      )))
 
 
 (defn meta-file? [ path ]

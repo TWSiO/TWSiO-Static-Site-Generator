@@ -55,10 +55,8 @@
 
                              "mustache" (util/render-default
                                           file-meta
-                                          (util/fixed-render
-                                            contents
-                                            file-meta
-                                            )))
+                                          contents
+                                            ))
         ]
     {converted-path processed-contents}
     ))
@@ -82,8 +80,9 @@
     (blog/process-posts X)
     (take 3 X)
     (map blog/get-metadata X)
-    (util/render-template "home" {:posts X})
-    (util/render-default {:title "Home"} X)))
+    (util/render-default
+      {:title "Home", :posts X}
+      (util/get-template "home"))))
 
 ;=== Copy other files ===
 

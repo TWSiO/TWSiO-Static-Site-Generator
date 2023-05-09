@@ -50,12 +50,17 @@
   (get-in post-data [1 :metadata]))
 
 (defn create-post-page [[path, data]]
-    [
-     (util/convert-default-path path)
-     (->> data
-          (util/render-template "post")
-          (util/render-default (:metadata data)))
-     ])
+  (let [out-path (util/convert-default-path path)
+        post-template (util/get-template "post")
+        metadata (assoc
+                   (:metadata data)
+                   :content
+                   (:html data))
+        ]
+    [out-path
+     (util/render-default metadata post-template)
+     ]
+    ))
 
 (defn post-pages [raw-blog]
   (->> raw-blog
@@ -72,6 +77,5 @@
     (as-> raw-blog X
          (process-posts X)
          (map get-metadata X)
-         (util/render-template "blog" {:posts X})
-         (util/render-default {:title title} X)
+         (util/render-default {:title title, :posts X} (util/get-template "blog"))
          {path X})))
