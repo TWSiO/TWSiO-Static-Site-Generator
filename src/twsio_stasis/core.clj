@@ -8,6 +8,7 @@
   (:require [babashka.fs :as fs])
   (:require [clojure.data.json :as json])
   (:require [clostache.parser :as stache])
+  (:require [markdown.core :as md])
   )
 
 
@@ -21,11 +22,16 @@
 (defn identify-section [[ path, _ ]]
   (let [blog-path-regex (re-pattern (str "^" config/blog-path))]
     (cond
-      (re-find blog-path-regex path) :blog
-      (= path "/index.mustache") :home
+      (and
+        (not= "/blog/index.mustache" path)
+        (not= "/blog/index.meta.json" path)
+        (re-find blog-path-regex path)) :blog
+
       (re-find util/md-or-mustache-regex path) :other
+
       ; I think that was original plan was to put this stuff in the config. Oh well.
       (util/meta-file? path) :meta
+
       :else :file-copy
       )))
 
@@ -45,6 +51,98 @@
 
 ;=== Individual pages ===
 
+(defn get-partials [text, templates]
+  (let [special-partials (merge util/default-partials
+                                {}) ; Maybe fill later.
+
+        joiner (fn [aggr, [tmp, prtial-text]]
+                 (assoc
+                   aggr
+                   (keyword (str tmp "-content"))
+                   prtial-text
+                   ))
+
+        shift-zipped (as-> templates X
+                       (rest X)
+                       (map util/get-template X)
+                       (conj X text)
+                       (zipmap templates X))
+
+        nested-content (reduce joiner {} shift-zipped)
+        ]
+
+    (merge special-partials nested-content)))
+
+(defn blog-list-lambda
+  "Parse JSON, do blog list stuff, return blog list HTML.
+  Create a template just for a blog listing."
+  [json-string]
+  (let [params (json/read-str json-string :key-fn keyword)
+        raw-blog (:blog sectioned-raw-contents)
+        posts (blog/process-posts raw-blog)
+        ]
+    (if (contains? params :max)
+      (blog/blog-list (take (:max params) posts))
+      (blog/blog-list posts))
+    )
+  )
+
+(def mustache-lambdas
+  {:blog-list blog-list-lambda
+   })
+
+(defn process-mustache
+  "Special processing of mustache templates to add in lambdas and other things."
+  [text, metadata]
+  (let [complete-metadata (merge metadata mustache-lambdas)
+        partials (get-partials text (:templates metadata))
+        ]
+    (if (contains? metadata :templates)
+
+      (util/render-template 
+        (first (:templates metadata))
+        complete-metadata
+        partials)
+
+      (util/fixed-render text complete-metadata)
+      )))
+
+(defn escape-heading
+  "I've somewhat forgotten what this is, but I think it allows adding HTML or mustache stuff in markdown files.
+  I think that it might allow for multi-line things. Not quite sure."
+  [text, state]
+  (if (contains? state :inline-heading)
+
+    [(if (= "<h1>@@" (subs text 0 6))
+       (subs (subs text 0 (- (count text) 6)) 6)
+       text
+       ),
+     state]
+      
+  [text, state]
+    ))
+
+; TODO Use with blogs posts.
+(defn generic-processing
+  " Process mustache
+  Surround with template specified in template metadata
+  Maybe make extensible or something?
+  Convert markdown to HTML (mustache) then render mustache."
+  [text, metadata]
+    (as-> text X
+      (md/md-to-html-string
+        X
+        :parse-meta? true
+        :inhibit-separator "%%"
+        :custom-transformers [escape-heading])
+      (process-mustache X metadata)
+      )
+  )
+
+; Get metadata
+(defn simple-processing [page-text]
+  (generic-processing page-text (md/md-to-meta page-text)))
+
 (defn process-other-page [file-meta, [path, contents]]
   (let [converted-path (util/convert-default-path path)
 
@@ -53,11 +151,11 @@
         processed-contents (case (fs/extension path)
                              "md" (util/render-individual-page-md contents)
 
-                             "mustache" (util/render-default
-                                          file-meta
-                                          contents
-                                            ))
+                             "mustache" (case (fs/extension (fs/strip-ext path))
+                                          "md" (simple-processing contents)
+                                          (process-mustache contents file-meta)))
         ]
+
     {converted-path processed-contents}
     ))
 
@@ -72,17 +170,6 @@
     (:other X)
     (map process-other-page-with-meta X)
     (apply merge X))))
-
-;First do special stuff for home page, then render-individual
-(def home-page
-  (as-> sectioned-raw-contents X
-    (:blog X)
-    (blog/process-posts X)
-    (take 3 X)
-    (map blog/get-metadata X)
-    (util/render-default
-      {:title "Home", :posts X}
-      (util/get-template "home"))))
 
 ;=== Copy other files ===
 
@@ -102,8 +189,6 @@
   (merge
     (blog/post-pages (:blog sectioned-raw-contents))
     other-pages
-    (blog/blog-page (:blog sectioned-raw-contents))
-    {"/index.html" home-page}
     (:file-copy sectioned-raw-contents)
     ))
 

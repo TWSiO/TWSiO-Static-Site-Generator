@@ -3,6 +3,7 @@
   (:require [medley.core :as medley])
   (:require [twsio-stasis.util :as util])
   (:require [twsio-stasis.config :as config])
+  (:require [clojure.data.json :as json])
   )
 
 (defn parse-post [raw-post]
@@ -14,16 +15,22 @@
   )
 
 (def default-post-metadata
-  {:title nil
-   :subtitle nil
+  {:subtitle nil
    })
 
+(defn get-blog-params [path metadata]
+  {:post-url (util/convert-default-path path)
+   :date-string (.format
+                  (java.text.SimpleDateFormat. "yyyy-MM-dd")
+                  (:date metadata))
+   }
+  )
+
 (defn modify-metadata [path metadata]
-  (as-> metadata X
-    (merge default-post-metadata X)
-    (assoc X :post-url (util/convert-default-path path))
-    (assoc X :date-string (.format (java.text.SimpleDateFormat. "yyyy-MM-dd") (:date X)))
-    ))
+  (merge
+    default-post-metadata
+    (get-blog-params path metadata)
+    metadata))
 
 ; Parses a post, modifies the metadata, and does other modifications.
 (defn process-post [[path, raw-post]]
@@ -69,13 +76,8 @@
        util/to-hash-map
        ))
 
-; The post listings page.
-(defn blog-page [raw-blog]
-  (let [path (str config/blog-path "index.html")
-        title (get config/html-page-titles path)
-        ]
-    (as-> raw-blog X
-         (process-posts X)
-         (map get-metadata X)
-         (util/render-default {:title title, :posts X} (util/get-template "blog"))
-         {path X})))
+(defn blog-list [posts]
+  (util/render-template
+    "blog-list" 
+    {:posts (map get-metadata posts)}
+  ))

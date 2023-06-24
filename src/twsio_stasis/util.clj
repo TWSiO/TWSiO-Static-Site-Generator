@@ -39,7 +39,13 @@
 
 ; Converts file extension .md and .mustache to .html
 (defn convert-default-path [path]
-  (clojure.string/replace path md-or-mustache-regex ".html"))
+  (case (fs/extension path)
+    "md" (str (fs/strip-ext path) ".html")
+    "mustache" (case (fs/extension (fs/strip-ext path))
+                 "md" (str (fs/strip-ext (fs/strip-ext path)) ".html")
+                 (str (fs/strip-ext path) ".html")
+                 )
+    ))
 
 
 ; All templates as {"PATH" "CONTENTS"}
@@ -75,7 +81,7 @@
     "default"
     ;(merge source-meta {:content content})
     source-meta
-    (merge default-partials {:html partial-template}
+    (merge default-partials {:default-content partial-template}
     )))
 
 
