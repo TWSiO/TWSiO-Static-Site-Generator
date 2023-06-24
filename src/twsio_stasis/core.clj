@@ -7,7 +7,6 @@
   (:require [twsio-stasis.config :as config])
   (:require [babashka.fs :as fs])
   (:require [clojure.data.json :as json])
-  (:require [clostache.parser :as stache])
   (:require [markdown.core :as md])
   )
 

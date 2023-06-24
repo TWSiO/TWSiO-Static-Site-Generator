@@ -1,6 +1,6 @@
 (ns twsio-stasis.util
   (:require [stasis.core :as stasis])
-  (:require [clostache.parser :as stache])
+  (:require [cljstache.core :as stache])
   (:require [markdown.core :as md])
   (:require [medley.core :as medley])
   (:require [twsio-stasis.config :as config])

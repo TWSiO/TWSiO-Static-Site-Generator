@@ -8,7 +8,7 @@
                  [ring "1.9.5"]
                  [stasis "2.5.1"]
                  [markdown-clj "1.11.1"]
-                 [de.ubercode.clostache/clostache "1.4.0"]
+                 [cljstache "2.0.6"]
                  [medley "1.4.0"]
                  [babashka/fs "0.1.6"]
                  [enlive "1.1.6"]
